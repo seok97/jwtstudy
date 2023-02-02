@@ -1,5 +1,7 @@
-package com.cos.jwtstudy.jwt;
+package com.cos.jwtstudy.config.jwt;
 
+import com.auth0.jwt.JWT;
+import com.auth0.jwt.algorithms.Algorithm;
 import com.cos.jwtstudy.auth.PrincipalDetails;
 import com.cos.jwtstudy.model.User;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -16,6 +18,7 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.Date;
 
 // 스프링 시큐리티에서 UsernamePasswordAuthenticationFilter 가 있다.
 // /login 요청 에서 username, password 르 전송하면 (post)
@@ -90,12 +93,21 @@ public class JwtAuthenticationFilter extends UsernamePasswordAuthenticationFilte
     }
 
     /**
-     * attemptAuthentication 실행 후 인증이 정상적으로 되었으면 successfulAuthentication 함수가 실행된다.
-     * JWT 토큰을 만들어서 request 요청한 사용자에게 JWT토큰을 response 해주면 된다.
+     * attemptAuthentication 실행 후 인증이 정상적으로 되었으면(로그인이 성공하면) successfulAuthentication 함수가 실행된다.
+     * JWT 토큰을 만들어서 request 요청한 사용자에게 JWT 토큰을 response 해주면 된다.
      */
     @Override
     protected void successfulAuthentication(HttpServletRequest request, HttpServletResponse response, FilterChain chain, Authentication authResult) throws IOException, ServletException {
         log.info("######################################################### 인증이 성공하여 successfulAuthentication 메소드 실행됨. ");
-        super.successfulAuthentication(request, response, chain, authResult);
+        PrincipalDetails principalDetails = (PrincipalDetails) authResult.getPrincipal();
+
+        String jwtToken = JWT.create()
+                .withSubject("cos토큰")
+                .withExpiresAt(new Date(System.currentTimeMillis() + (60000 * 10))) // 토큰 만료 시간 ( 현재시간 + 단위 1/1000 초 )
+                .withClaim("id", principalDetails.getUser().getId()) // 비공개 키 값 ( 넣고 싶은것 아무거나? )
+                .withClaim("username", principalDetails.getUser().getUsername())
+                .sign(Algorithm.HMAC512("cos"));// Hash 암호 방식
+
+        response.addHeader("Authorization", "Bearer " + jwtToken);
     }
 }
