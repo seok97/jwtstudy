@@ -1,6 +1,14 @@
 package com.cos.jwtstudy.config.jwt;
 
+import com.auth0.jwt.JWT;
+import com.auth0.jwt.algorithms.Algorithm;
+import com.cos.jwtstudy.auth.PrincipalDetails;
+import com.cos.jwtstudy.model.User;
+import com.cos.jwtstudy.repository.UserRepository;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 
 import javax.servlet.FilterChain;
@@ -16,17 +24,51 @@ import java.io.IOException;
  */
 public class JwtAuthorizationFilter extends BasicAuthenticationFilter {
 
-    public JwtAuthorizationFilter(AuthenticationManager authenticationManager) {
+    private UserRepository userRepository;
+
+    public JwtAuthorizationFilter(AuthenticationManager authenticationManager, UserRepository userRepository) {
         super(authenticationManager);
+        this.userRepository = userRepository;
     }
 
     // 인증이나 권한이 필요한 주소 요청이 있을때 해당 필터를 타게 된다.
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws IOException, ServletException {
-        super.doFilterInternal(request, response, chain);
         System.out.println("인증이나 권한이 필요한 주소");
 
         String jwtHeader = request.getHeader("Authorization");
         System.out.println("jwtHeader : " + jwtHeader);
+
+        // header 가 있는지 확인
+        if(jwtHeader == null || !jwtHeader.startsWith("Bearer")){
+            chain.doFilter(request, response);
+            return;
+        }
+
+        // JWT 토큰을 검증하여 정상 사용자인지 확인
+        String jwtToken = request.getHeader("Authorization").replace("Bearer ", "");
+        // 토큰 서명
+        String username = JWT.require(Algorithm.HMAC512("cos")).build().verify(jwtToken).getClaim("username").asString();
+
+        System.out.println("username : " + username);
+
+        // 서명이 정상적으로 됨
+        if(username != null){
+            User userEntity = userRepository.findByUsername(username);
+
+            PrincipalDetails principalDetails = new PrincipalDetails(userEntity);
+
+            System.out.println("auth : " + userEntity.getRoeleList());
+
+            // JWT 토큰 서명을 통해 서명이 정상이면 Authentication 객체를 만들어 준다.
+            Authentication authentication =
+                    new UsernamePasswordAuthenticationToken(principalDetails, null, principalDetails.getAuthorities());
+
+            // SecurityContextHolder.getContext() -> Spring Security 의 세션
+            // 강제로 시큐리티의 세션에 접근하여 Authentication 객체를 저장한다.
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+
+            chain.doFilter(request, response);
+        }
     }
 }
